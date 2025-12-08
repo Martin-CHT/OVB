@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           OVB elearning – videa
 // @namespace      https://github.com/Kamdar-Wolf/Skripty
-// @version        1.2.4
+// @version        1.2.5
 // @description    Odstraní nepotřebné prvky, simuluje aktivitu a automaticky potvrzuje okna
 // @author         Martin
 // @copyright      2025, Martin
@@ -12,8 +12,8 @@
 // @supportURL     https://github.com/Kamdar-Wolf/Skripty/issues
 // @icon           https://www.vaskonzultant.cz/dataWeb/img/logos/certificate--vsfs.png
 // @icon64         https://www.vaskonzultant.cz/dataWeb/img/logos/certificate--vsfs.png
-// @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/OVB/Elearning.user.js
-// @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/OVB/Elearning.user.js
+// @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
+// @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @match          https://iczv.vsfs.cz/auth/dipon/*
 // @noframes
 // @run-at         document-end
