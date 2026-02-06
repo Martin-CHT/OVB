@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Finreport
 // @namespace    https://github.com/Martin-CHT/OVB
-// @version      1.0.0
-// @description  Auto-sbalování + Kompletní vyplňování formulářů (AML atd.) + Výpočet data.
+// @version      1.1.0
+// @description  Auto-sbalování + Formuláře + Datum + Přesměrování (Clean verze)
 // @author       Martin
 // @copyright    2026, Martin
 // @license      Proprietary - internal use only
@@ -24,9 +24,16 @@
 (function() {
     'use strict';
 
+    // === 0. PŘESMĚROVÁNÍ (NOVÉ) ===
+    // Pokud je uživatel na "čistém" dashboardu (finreport/), přesměruj na OVB.
+    if (window.location.pathname === '/finreport/' && window.location.search === '') {
+        window.location.replace('https://www.finreport.cz/finreport/index.php?app=ovb');
+        return; // Ukončíme skript, stránka se reloadne
+    }
+
     // === KONFIGURACE ===
     const HEARTBEAT_RATE = 1000; // Interval kontroly (ms)
-    const FOLD_DELAY = 5000;     // Čas do sbalení (ms)
+    const FOLD_DELAY = 15000;     // Čas do sbalení (ms)
     const MISTO_TEXT = "v Litoměřicích";
 
     // === POMOCNÉ FUNKCE PRO FORMULÁŘE ===
@@ -108,7 +115,7 @@
         // 2. AML B2 - Vlastní účet (Ano)
         forceCheck('input[name="b2_potvrzeni2"][value="1"]');
 
-        // 3. Výhled finanční situace - Pozitivní (value="1")
+        // 3. Výhled finanční situace - Pozitivní (value="1"]');
         forceCheck('input[name="b8_financni_situace"][value="1"]');
 
         // 4. Hlavní živitel
@@ -136,7 +143,6 @@
         // Abychom nepřepisovali datum pořád dokola (pokud si ho uživatel změní),
         // zkontrolujeme, zda už jsme ho vyplnili, nebo zda je prázdné/defaultní.
         // Pro jednoduchost a robustnost: Pokud se datum v polích neshoduje s naším vypočítaným, opravíme ho.
-        // (Pokud chcete povolit ruční změnu, museli bychom přidat flag, ale zadání zní "vyplní datum")
 
         // 1. Výpočet data
         // Dnešní datum
@@ -178,7 +184,7 @@
     var waitJq = setInterval(function() {
         if (window.jQuery) {
             clearInterval(waitJq);
-            console.log('Finreport Script v0.7.0: Startuji Heartbeat...');
+            console.log('Finreport Script v1.6.0: Startuji Heartbeat...');
             // Spouštíme smyčku
             setInterval(heartbeat, HEARTBEAT_RATE);
             heartbeat(); // První spuštění ihned
