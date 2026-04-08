@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name           OVB Elearning – auto potvrzení videa
+// @name           OVB elearning – auto potvrzení videa
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        3.0.0
+// @version        3.1.0
 // @description    Automaticky potvrzuje výzvy k bdělosti a postupně přepíná mezi segmenty videa.
 // @author         Martin
 // @copyright      2025-2026, Martin
