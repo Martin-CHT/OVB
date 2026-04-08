@@ -1,20 +1,21 @@
 // ==UserScript==
 // @name           OVB elearning – bdělost
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        1.5.0
+// @version        2.1.0
 // @description    Odstraní nepotřebné prvky, simuluje aktivitu a automaticky potvrzuje okna
 // @author         Martin
 // @copyright      2025-2026, Martin
 // @license        Proprietary - internal use only
-// @homepageURL    https://github.com/Kamdar-Wolf/Skripty
-// @source         https://github.com/Kamdar-Wolf/Skripty
+// @homepageURL    https://github.com/Martin-CHT/OVB
+// @source         https://github.com/Martin-CHT/OVB
 // @website        https://iczv.vsfs.cz
 // @supportURL     https://github.com/Martin-CHT/OVB/issues
 // @icon           https://www.vaskonzultant.cz/dataWeb/img/logos/certificate--vsfs.png
 // @icon64         https://www.vaskonzultant.cz/dataWeb/img/logos/certificate--vsfs.png
 // @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
-// @match          https://iczv.vsfs.cz/auth/dipon/*
+// @match          https://iczv.vsfs.cz/auth/dipon/?a=elearning*
+// @match          https://iczv.vsfs.cz/auth/dipon/?a=interaktivni
 // @noframes
 // @run-at         document-end
 // @tag            OVB
@@ -103,6 +104,71 @@
 
     // Interval 5 s – Worker zajistí přesné spouštění i na pozadí
     createWorkerTimer(simulateActivity, 5000);
+
+    /* ===== Zabránění spánku obrazovky / OS ===== */
+    // Sdílené přes window.__iczv.wakeLock – pokud už lock drží
+    // Elearning-video.user.js, tento skript ho nezíská znovu.
+    const initWakeLock = () => {
+        if (window.__iczv.wakeLock) {
+            log('Wake Lock již aktivní (z druhého skriptu)');
+            return;
+        }
+
+        // Strategie 1: Screen Wake Lock API
+        if ('wakeLock' in navigator) {
+            const requestLock = async () => {
+                try {
+                    const lock = await navigator.wakeLock.request('screen');
+                    window.__iczv.wakeLock = lock;
+                    log('Screen Wake Lock aktivován');
+                    lock.addEventListener('release', () => {
+                        log('Wake Lock uvolněn');
+                        window.__iczv.wakeLock = null;
+                    });
+                } catch (e) {
+                    log('Wake Lock selhal:', e.message, '– fallback na video');
+                    createVideoFallback();
+                }
+            };
+
+            requestLock();
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && !window.__iczv.wakeLock) {
+                    requestLock();
+                }
+            });
+        } else {
+            log('Wake Lock API nedostupné – fallback na video');
+            createVideoFallback();
+        }
+    };
+
+    const createVideoFallback = () => {
+        if (window.__iczv.wakeLock) return;
+
+        const video = document.createElement('video');
+        video.setAttribute('playsinline', '');
+        video.setAttribute('muted', '');
+        video.loop = true;
+        Object.assign(video.style, {
+            position: 'fixed', top: '-1px', left: '-1px',
+            width: '1px', height: '1px', opacity: '0.01',
+            pointerEvents: 'none', zIndex: '-1'
+        });
+
+        video.src = 'data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJC'
+            + 'h4ECQoWBAhhTgGcBAAAAAAABFUmpZlVC53BBAEAAAAAAAAVRtU2mhBI2mhkG2Y5MH8gAAA'
+            + 'AAAAKZBAAAAAAAAVaYAEAvABNDGsXbo0CcQAAAAAAABMUfGnAdSCAAAAAAAARmiIhAAIGNga'
+            + 'MggEBa8IBIOBAAAAAAABR';
+
+        document.body.appendChild(video);
+        video.play().catch(() => {});
+        window.__iczv.wakeLock = 'video-fallback';
+        log('Video fallback pro wake lock aktivován');
+    };
+
+    initWakeLock();
 
     /* ===== Selektory pro popup detekci ===== */
     const CONFIRM_SELECTORS = [
