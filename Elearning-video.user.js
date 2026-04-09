@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name           OVB elearning – auto potvrzení videa
+// @name           ICZV helper – auto potvrzení videa
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        3.1.0
+// @version        3.5.0
 // @description    Automaticky potvrzuje výzvy k bdělosti a postupně přepíná mezi segmenty videa.
 // @author         Martin
 // @copyright      2025-2026, Martin
@@ -13,7 +13,7 @@
 // @icon64         https://www.vaskonzultant.cz/dataWeb/img/logos/certificate--vsfs.png
 // @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning-video.user.js
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning-video.user.js
-// @match          https://iczv.vsfs.cz/auth/dipon/*
+// @match          https://iczv.vsfs.cz/auth/dipon/?a=video*
 // @noframes
 // @run-at         document-start
 // @tag            OVB
@@ -27,7 +27,7 @@
 
   const SCRIPT_ID = 'iczv-video';
   const DEBUG = true;
-  const NEXT_SEGMENT_DELAY = 5; // sekundy čekání před přepnutím
+  const NEXT_SEGMENT_DELAY = 3; // sekundy čekání před přepnutím
   const log = (...args) => DEBUG && console.log(`[${SCRIPT_ID}]`, ...args);
 
   /* ===== Utility: čekání na DOM ===== */
@@ -38,6 +38,39 @@
       fn();
     }
   };
+  /* ===== Odstranění nepotřebných prvků ===== */
+  const REMOVE_SELECTOR = [
+    'div.dropdown.position-absolute',
+    'div.float-end',
+    '.navbar',
+    '.navbar-expand-lg',
+    '.navbar-light',
+    '.bg-vsfs',
+    '.fixed-top',
+    '.navigation',
+    'div.row.banner'
+  ].join(', ');
+
+  const removeElements = () => {
+    const elements = document.querySelectorAll(REMOVE_SELECTOR);
+    if (elements.length === 0) return;
+    log(`Odstraňuji ${elements.length} prvků`);
+    elements.forEach(el => el.remove());
+  };
+
+  // Musí čekat na DOM – skript běží s @run-at document-start,
+  // takže document.body ještě neexistuje.
+  whenReady(() => {
+    removeElements();
+
+    const cleanupObserver = new MutationObserver(() => {
+      cleanupObserver.disconnect();
+      removeElements();
+      cleanupObserver.observe(document.body, { childList: true, subtree: true });
+    });
+    cleanupObserver.observe(document.body, { childList: true, subtree: true });
+  });
+
 
   /* ===== Koordinace s Elearning.user.js ===== */
   if (!window.__iczv) window.__iczv = {};
@@ -246,15 +279,103 @@
     }, 1000);
   };
 
+  /* --- Stránka se seznamem videí (?a=video) --- */
+  const handleVideoListingPage = () => {
+    // Najít video bloky (ne video-inactive = nepovinné)
+    const allBlocks = document.querySelectorAll(
+      'div.me-2.mb-3.d-block.float-start.mb-4:not(.video-inactive)'
+    );
+
+    if (allBlocks.length === 0) return false;
+
+    log(`Video listing page – nalezeno ${allBlocks.length} povinných videí`);
+
+    let target = null;
+    let targetName = '?';
+
+    for (const block of allBlocks) {
+      const link = block.querySelector('a[href*="a=video"]');
+      if (!link) continue;
+
+      // Splněné video má <span class="bg-success" title="splněno">
+      const completedBadge = block.querySelector('span.bg-success[title="splněno"]');
+      const img = block.querySelector('img');
+      const name = img ? img.alt : '?';
+
+      if (completedBadge) {
+        log(`  ✅ ${name} – splněno`);
+      } else {
+        log(`  ⬜ ${name} – NESPLNĚNO`);
+        if (!target) { target = link; targetName = name; }
+      }
+    }
+
+    if (!target) {
+      log('Všechna povinná videa splněna! 🎉');
+      showToast('🎉 Všechna povinná videa jsou splněna!', 10000);
+      return true;
+    }
+
+    log(`Další video: ${targetName}`);
+
+    const { toast, body: toastBody } = createToastEl(
+      `🎬 Další: ${targetName}`, '#4ca0ff', `Otevírám za ${NEXT_SEGMENT_DELAY}s…`
+    );
+    const container = getToastContainer();
+    container.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
+
+    let remaining = NEXT_SEGMENT_DELAY;
+    const timer = setInterval(() => {
+      remaining--;
+      toastBody.textContent = `Otevírám za ${remaining}s…`;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        log(`Otevírám: ${targetName}`);
+        target.click();
+      }
+    }, 1000);
+    return true;
+  };
+
+  /* --- Klik na „zpět" po dokončení všech segmentů --- */
+  const goBackToListing = () => {
+    const backBtn = document.querySelector('a.btn.back[href*="a=video"]');
+    if (!backBtn) { log('Tlačítko zpět nenalezeno'); return; }
+
+    log(`Všechny segmenty hotovy – vracím se na seznam za ${NEXT_SEGMENT_DELAY}s`);
+
+    const { toast, body: toastBody } = createToastEl(
+      '✅ Video dokončeno!', '#22c55e', `Vracím se na seznam za ${NEXT_SEGMENT_DELAY}s…`
+    );
+    const container = getToastContainer();
+    container.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
+
+    let remaining = NEXT_SEGMENT_DELAY;
+    const timer = setInterval(() => {
+      remaining--;
+      toastBody.textContent = `Vracím se na seznam za ${remaining}s…`;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        backBtn.click();
+      }
+    }, 1000);
+  };
+
   /* --- Hlavní inicializace --- */
   const initVideoNavigation = () => {
     const segments = document.querySelectorAll('.videocasti');
-    if (segments.length === 0) return;
+
+    // Žádné segmenty → zkusit stránku se seznamem videí
+    if (segments.length === 0) {
+      handleVideoListingPage();
+      return;
+    }
 
     log(`Nalezeno ${segments.length} segmentů videa na stránce`);
     log('URL:', window.location.href);
 
-    // Logovat stav všech segmentů
     segments.forEach((seg, i) => {
       const tag = seg.tagName;
       const classes = seg.className;
@@ -274,7 +395,6 @@
       log(`Segment page – přehrávám: ${segName}`);
       showToast(`🎬 Přehrávám: ${segName}`, 5000);
 
-      // Zjistit celkový čas z textu "05:32/17:21" → 17:21
       if (active) {
         const totalMatch = active.textContent.match(/\/(\d{1,2}:\d{2})/);
         const totalTimeSec = totalMatch ? parseMMSS(totalMatch[1]) : null;
@@ -282,9 +402,6 @@
         if (totalTimeSec) {
           log(`Celkový čas segmentu: ${totalMatch[1]} (${totalTimeSec}s)`);
 
-          // Sledovat timer – po dosažení celkového času
-          // nativní skript provede redirect na overview.
-          // Safety net: pokud redirect nenastane do 5 s, najdeme další sami.
           const observer = new MutationObserver(() => {
             const current = parseHHMMSS(timeEl.textContent);
             if (current !== null && current >= totalTimeSec) {
@@ -301,14 +418,15 @@
         }
       }
     } else {
-      // === OVERVIEW PAGE: najít a kliknout na další segment ===
+      // === OVERVIEW PAGE ===
       log('Overview page – hledám další segment');
       const next = findNextSegment(segments);
       if (next) {
         clickWithCountdown(next);
       } else {
+        // Všechny segmenty hotové → zpět na seznam videí
         log('Všechny segmenty dokončeny ✅');
-        showToast('🎉 Všechny části videa dokončeny!', 8000);
+        goBackToListing();
       }
     }
   };
@@ -316,5 +434,5 @@
   /* ===== Start ===== */
   whenReady(initVideoNavigation);
 
-  log('ICZV video helper v3.1 inicializován');
+  log('ICZV video helper v4 inicializován');
 })();
