@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           OVB elearning – bdělost
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        2.1.0
+// @version        2.5.0
 // @description    Odstraní nepotřebné prvky, simuluje aktivitu a automaticky potvrzuje okna
 // @author         Martin
 // @copyright      2025-2026, Martin
@@ -163,7 +163,7 @@
             + 'MggEBa8IBIOBAAAAAAABR';
 
         document.body.appendChild(video);
-        video.play().catch(() => {});
+        video.play().catch(() => { });
         window.__iczv.wakeLock = 'video-fallback';
         log('Video fallback pro wake lock aktivován');
     };
@@ -233,8 +233,7 @@
     const initialPopup = document.querySelector(POPUP_SELECTOR);
     if (initialPopup) tryConfirmPopup(initialPopup);
 
-    /* ===== 6. Odpočet do cíle (3 hodiny) ===== */
-    const TARGET_SECONDS = 3 * 60 * 60; // 3:00:00
+    /* ===== 6. Odpočet do cíle (elearning: 3 h, interaktivní: 2 h) ===== */
 
     const parseTime = (str) => {
         const m = str.match(/(\d{2}):(\d{2}):(\d{2})/);
@@ -250,8 +249,28 @@
     };
 
     const initCountdown = () => {
-        // Najít element s „Započtený čas"
-        const slideP = document.querySelector('div.slide > p');
+        // Cíl závisí na typu stránky
+        const isInteraktivni = location.search.includes('a=interaktivni');
+        const TARGET_SECONDS = isInteraktivni ? 2 * 60 * 60 : 3 * 60 * 60;
+        const targetLabel = isInteraktivni ? '2 h' : '3 h';
+
+        // Najít element s „Započtený čas" – flexibilní selektor pro obě stránky
+        // Strategie: najít <span> s časem (HH:MM:SS), ověřit že rodič obsahuje „Započtený čas"
+        let slideP = document.querySelector('div.slide > p');
+        if (!slideP || !slideP.textContent.includes('Započtený čas')) {
+            slideP = null;
+            const allSpans = document.querySelectorAll('span.fw-bold');
+            for (const span of allSpans) {
+                if (/\d{2}:\d{2}:\d{2}/.test(span.textContent)) {
+                    const parent = span.parentElement;
+                    if (parent && parent.textContent.includes('Započtený čas')) {
+                        slideP = parent;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (!slideP || !slideP.textContent.includes('Započtený čas')) {
             log('Časovač nenalezen – sekce 6 přeskočena');
             return;
@@ -350,7 +369,7 @@
         // Jednorázový výpočet při načtení (fixní do dalšího refreshe)
         syncPragueTime().then(updateETA);
 
-        log('Odpočet do 3 h + ETA inicializován');
+        log(`Odpočet do ${targetLabel} + ETA inicializován`);
     };
 
     initCountdown();
