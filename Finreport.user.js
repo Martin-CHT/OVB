@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Finreport
 // @namespace    https://github.com/Martin-CHT/OVB
-// @version      1.1.0
+// @version      1.2.0
 // @description  Auto-sbalování + Formuláře + Datum + Přesměrování (Clean verze)
 // @author       Martin
 // @copyright    2026, Martin
@@ -38,12 +38,16 @@
 
     // === POMOCNÉ FUNKCE PRO FORMULÁŘE ===
 
-    // Funkce pro zaškrtnutí Radio/Checkboxu
+    // Funkce pro zaškrtnutí Radio/Checkboxu s opravou přepisování
     function forceCheck(selector) {
         var $el = $(selector);
         if ($el.length > 0 && !$el.is(':checked')) {
-            $el.prop('checked', true);
-            $el.trigger('change');
+            // Pokud jde o radio button, musíme manuálně odškrtnout ostatní se stejným jménem
+            if ($el.attr('type') === 'radio' && $el.attr('name')) {
+                $('input[name="' + $el.attr('name') + '"]').prop('checked', false).trigger('change');
+            }
+            // Zaškrtneme požadovaný element
+            $el.prop('checked', true).trigger('change');
             // console.log(`Finreport: Zaškrtnuto -> ${selector}`);
         }
     }
@@ -71,12 +75,32 @@
 
             var fullId = $content.attr('id');
             var shortName = fullId.replace('output-home-', '');
-            var $btn = $header.find('.home-show');
+            
+            // Původní tlačítko schováme, aby auto-sbalování neukládalo stav na server
+            var $nativeBtn = $header.find('.home-show');
+            if ($nativeBtn.length > 0) {
+                $nativeBtn.hide();
+            }
+
+            var $btn = $header.find('.finreport-fold-btn');
 
             if ($btn.length === 0) {
-                var btnHtml = `<a href="#" class="home-show imagebutton bi bi-fold-white" style="float: right; margin: -4px" data-show-name="${shortName}" data-show="1"></a>`;
+                var isHidden = $content.is(':hidden');
+                var iconClass = isHidden ? 'bi-unfold-white' : 'bi-fold-white';
+                var btnHtml = `<a href="#" class="finreport-fold-btn imagebutton bi ${iconClass}" style="float: right; margin: -4px" data-show-name="${shortName}"></a>`;
                 $header.append(btnHtml);
-                $btn = $header.find('.home-show');
+                $btn = $header.find('.finreport-fold-btn');
+
+                $btn.on('click', function(e) {
+                    e.preventDefault();
+                    if ($btn.hasClass('bi-fold-white')) {
+                        $btn.removeClass('bi-fold-white').addClass('bi-unfold-white');
+                        $content.slideUp(200);
+                    } else {
+                        $btn.removeClass('bi-unfold-white').addClass('bi-fold-white');
+                        $content.slideDown(200);
+                    }
+                });
             }
 
             var isOpen = $btn.hasClass('bi-fold-white');
@@ -85,12 +109,11 @@
                 if (!timerRunning) {
                     var isInitialized = $btn.data('script-init-done');
                     if (!isInitialized) {
-                        $btn.trigger('click');
                         $btn.data('script-init-done', true);
                     } else {
                         $btn.data('auto-fold-timer-running', true);
                         setTimeout(function() {
-                            var $currentBtn = $header.find('.home-show');
+                            var $currentBtn = $header.find('.finreport-fold-btn');
                             if ($currentBtn.hasClass('bi-fold-white')) {
                                 $currentBtn.trigger('click');
                             }
@@ -173,11 +196,118 @@
         }
     }
 
+    // === MODUL 4: ESD INVESTICE (Tlačítka) ===
+    function addInvestmentButtons() {
+        // Tlačítka chceme zobrazit pouze, pokud jsme skutečně na esd
+        if (window.location.href.includes('app=esd')) {
+            var $header = $('#sidebox-header.sidebox-header');
+            if ($header.length > 0 && $header.find('.finreport-esd-btns').length === 0) {
+                var btnHtml = `
+                    <div class="finreport-esd-btns" style="float: right; margin-top: -2px; margin-right: 10px;">
+                        <button type="button" class="btn-esd-zakladni" style="margin-right: 5px; background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">Základní</button>
+                        <button type="button" class="btn-esd-informovany" style="margin-right: 5px; background: #ffc107; color: black; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">Informovaný</button>
+                        <button type="button" class="btn-esd-pokrocily" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;">Pokročilý</button>
+                    </div>
+                `;
+                $header.append(btnHtml);
+
+                $header.find('.btn-esd-zakladni').on('click', function(e) {
+                    e.preventDefault();
+                    fillESD('zakladni');
+                });
+                $header.find('.btn-esd-informovany').on('click', function(e) {
+                    e.preventDefault();
+                    fillESD('informovany');
+                });
+                $header.find('.btn-esd-pokrocily').on('click', function(e) {
+                    e.preventDefault();
+                    fillESD('pokrocily');
+                });
+            }
+        }
+    }
+
+    function fillESD(type) {
+        // Znalosti a zkušenosti (1-5)
+        forceCheck('input[name="id_1"][value="2"]'); // Vyšší výnos = vyšší riziko
+        forceCheck('input[name="id_2"][value="1"]'); // Diverzifikace...
+        forceCheck('input[name="id_3"][value="3"]'); // Akcie = podíl na zisku
+        forceCheck('input[name="id_4"][value="2"]'); // České státní dluhopisy
+        forceCheck('input[name="id_5"][value="4"]'); // U fondů není garantována výplata
+
+        // Vzdělání a profese (6-7)
+        forceCheck('input[name="id_6"][value="1"]'); // Ne
+        forceCheck('input[name="id_7"][value="1"]'); // Ne
+
+        // Inteligentní předpoklad finanční situace (část 8 - Rozpočet)
+        if (type === 'zakladni') {
+            forceValue('input[name="b8_prijmy_mesicne"]', '30000');
+            forceValue('input[name="b8_vydaje_mesicne"]', '20000');
+            forceValue('input[name="b8_rezerva"]', '50000');
+            forceValue('input[name="b8_pravidelne_investice"]', '1000');
+        } else if (type === 'informovany') {
+            forceValue('input[name="b8_prijmy_mesicne"]', '50000');
+            forceValue('input[name="b8_vydaje_mesicne"]', '30000');
+            forceValue('input[name="b8_rezerva"]', '150000');
+            forceValue('input[name="b8_pravidelne_investice"]', '3000');
+        } else if (type === 'pokrocily') {
+            forceValue('input[name="b8_prijmy_mesicne"]', '80000');
+            forceValue('input[name="b8_vydaje_mesicne"]', '40000');
+            forceValue('input[name="b8_rezerva"]', '300000');
+            forceValue('input[name="b8_pravidelne_investice"]', '10000');
+        }
+
+        // Část 8 (Zkušenosti) - odškrtnutí všech doplňujících otázek
+        $('input[name^="id_8_"][type="checkbox"]').prop('checked', false).trigger('change');
+
+        if (type === 'zakladni') {
+            forceCheck('input[name="id_8_a_1"][value="1"]'); // Peněžní/dluhopisové: nikdy
+            forceCheck('input[name="id_8_b_1"][value="1"]'); // Smíšené/akciové: nikdy
+            forceCheck('input[name="id_8_c_1"][value="1"]'); // Akcie/certifikáty: nikdy
+            forceCheck('input[name="id_8_d_1"][value="1"]'); // Pákové: nikdy
+        } else if (type === 'informovany') {
+            forceCheck('input[name="id_8_a_1"][value="2"]'); // Peněžní: ano
+            forceCheck('input[name="id_8_a_2"]');            // Pravidelně peněžní
+            forceCheck('input[name="id_8_b_1"][value="2"]'); // Smíšené: ano
+            forceCheck('input[name="id_8_b_2"]');            // Pravidelně smíšené
+            forceCheck('input[name="id_8_c_1"][value="1"]'); // Akcie: nikdy
+            forceCheck('input[name="id_8_d_1"][value="1"]'); // Pákové: nikdy
+        } else if (type === 'pokrocily') {
+            forceCheck('input[name="id_8_a_1"][value="2"]'); // Peněžní: ano
+            forceCheck('input[name="id_8_a_2"]');            // Pravidelně
+            forceCheck('input[name="id_8_a_3"]');            // Objem nad 100k
+            forceCheck('input[name="id_8_b_1"][value="2"]'); // Smíšené: ano
+            forceCheck('input[name="id_8_b_2"]');            // Pravidelně
+            forceCheck('input[name="id_8_b_3"]');            // Objem nad 100k
+            forceCheck('input[name="id_8_c_1"][value="1"]'); // Akcie: nikdy (dle předlohy Pokročilý)
+            forceCheck('input[name="id_8_d_1"][value="1"]'); // Pákové: nikdy
+        }
+
+        // Část 9 (ESG)
+        // Striktní nastavení podle předlohy: Pokročilý má Ano, ostatní mají Ne.
+        var wantsESG = (type === 'pokrocily');
+
+        if (wantsESG) {
+            // Uživatel chce zohlednit ESG (Pokročilý profil)
+            forceCheck('input[name="id_9"][value="1"]');   // Ano
+            forceCheck('input[name="id_10"][value="-2"]'); // Ano, není podstatné do jaké míry
+            forceCheck('input[name="id_11"][value="-2"]'); // Ano, není podstatné do jaké míry
+            forceCheck('input[name="id_12"][value="1"]');  // Ano
+        } else {
+            // Výchozí stav - bez ESG (Základní, Informovaný)
+            forceCheck('input[name="id_9"][value="2"]'); // Ne
+            forceCheck('input[name="id_10"][value="-1"]'); // Ne
+            forceCheck('input[name="id_11"][value="-1"]'); // Ne
+            forceCheck('input[name="id_12"][value="2"]'); // Ne
+        }
+    }
+
     // === HLAVNÍ SMYČKA (HEARTBEAT) ===
     function heartbeat() {
         maintainSideboxes();    // Sbalování boxů
         autoFillForms();        // Vyplňování checkboxů a textů
         calculateAndFillDate(); // Vyplňování data
+        addInvestmentButtons(); // Přidání tlačítek do ESD
     }
 
     // === START SKRIPTU ===
