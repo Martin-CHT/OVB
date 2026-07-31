@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           OVB elearning - textová část
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        2.8.0
+// @version        2.8.1
 // @description    Odstraní nepotřebné prvky, simuluje aktivitu, automaticky potvrzuje okna a obnovuje stránku
 // @author         Martin
 // @copyright      2025-2026, Martin
@@ -15,7 +15,7 @@
 // @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @match          https://iczv.vsfs.cz/auth/dipon/?a=elearning*
-// @match          https://iczv.vsfs.cz/auth/fpo/*
+// @match          https://iczv.vsfs.cz/auth/fpo/?a=elearning
 // @noframes
 // @run-at         document-end
 // @tag            OVB
