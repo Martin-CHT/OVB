@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name           OVB elearning - textová část
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        2.8.1
-// @description    Odstraní nepotřebné prvky, simuluje aktivitu, automaticky potvrzuje okna a obnovuje stránku
+// @version        2.8.2
+// @description    Odstraní nepotřebné prvky, simuluje aktivitu, automaticky potvrzuje okna, obnovuje stránku a brání zhasnutí displeje
 // @author         Martin
 // @copyright      2025-2026, Martin
 // @license        Proprietary - internal use only
@@ -154,58 +154,81 @@
 
     createWorkerTimer(simulateActivity, 5000);
 
-    /* ===== Zabránění spánku obrazovky / OS ===== */
+    /* ===== Zabránění spánku obrazovky (Trik jako na YouTube) ===== */
     const initWakeLock = () => {
-        if (window.__iczv.wakeLock) return;
+        // 1. Vytvoření neviditelného autoplay videa
+        // Prohlížeče neuspí obrazovku, pokud na stránce hraje video (proto YouTube nezhasíná).
+        // Ztlumená (muted) videa mohou běžet i bez kliknutí uživatele.
+        const createVideoFallback = () => {
+            if (document.getElementById('ovb-nosleep-video')) return;
 
+            const video = document.createElement('video');
+            video.id = 'ovb-nosleep-video';
+            video.setAttribute('playsinline', '');
+            video.setAttribute('muted', '');
+            video.setAttribute('autoplay', ''); // Zásadní pro auto-start
+            video.muted = true;
+            video.loop = true;
+            Object.assign(video.style, {
+                position: 'fixed', top: '0', left: '0',
+                width: '1px', height: '1px', opacity: '0.001',
+                pointerEvents: 'none', zIndex: '-9999'
+            });
+
+            // 1x1 transparentní webm
+            video.src = 'data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJCh4ECQoWBAhhTgGcBAAAAAAABFUmpZlVC53BBAEAAAAAAAAVRtU2mhBI2mhkG2Y5MH8gAAAAAAAKZBAAAAAAAAVaYAEAvABNDGsXbo0CcQAAAAAAABMUfGnAdSCAAAAAAAARmiIhAAIGNgaMggEBa8IBIOBAAAAAAABR';
+            document.body.appendChild(video);
+
+            video.play().then(() => {
+                log('YouTube trik (neviditelné video) běží - displej nezhasne.');
+            }).catch(e => log('Video autoplay zablokován, čekám na kliknutí.', e));
+
+            // Zajištění, že se video spustí při prvním kliknutí, pokud to autoplay nezvládl
+            const forcePlay = () => {
+                video.play();
+                document.removeEventListener('click', forcePlay);
+                document.removeEventListener('touchstart', forcePlay);
+            };
+            document.addEventListener('click', forcePlay);
+            document.addEventListener('touchstart', forcePlay);
+        };
+
+        createVideoFallback();
+
+        // 2. Oficiální WakeLock API (jako doplněk k videu)
+        // Toto API vyžaduje interakci uživatele, proto jej spouštíme až po kliknutí.
         if ('wakeLock' in navigator) {
+            let wakeLockObj = null;
+
             const requestLock = async () => {
                 try {
-                    const lock = await navigator.wakeLock.request('screen');
-                    window.__iczv.wakeLock = lock;
-                    log('Screen Wake Lock aktivován');
-                    lock.addEventListener('release', () => {
-                        window.__iczv.wakeLock = null;
+                    wakeLockObj = await navigator.wakeLock.request('screen');
+                    log('Oficiální WakeLock API aktivováno.');
+                    wakeLockObj.addEventListener('release', () => {
+                        wakeLockObj = null;
                     });
-                } catch (e) {
-                    createVideoFallback();
+                } catch (err) {
+                    log('WakeLock API selhalo (nevadí, zálohuje to video).', err.message);
                 }
             };
 
-            requestLock();
-
-            document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible' && !window.__iczv.wakeLock) {
+            const triggerWakeLock = () => {
+                if (!wakeLockObj && document.visibilityState === 'visible') {
                     requestLock();
                 }
+            };
+
+            // Aktivujeme oficiální zámek při jakékoliv interakci se stránkou
+            document.addEventListener('click', triggerWakeLock, { once: true });
+            document.addEventListener('mousemove', triggerWakeLock, { once: true });
+            document.addEventListener('keydown', triggerWakeLock, { once: true });
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && !wakeLockObj) {
+                    requestLock(); // Zkusí se obnovit při návratu na tab
+                }
             });
-        } else {
-            createVideoFallback();
         }
-    };
-
-    const createVideoFallback = () => {
-        if (window.__iczv.wakeLock) return;
-
-        const video = document.createElement('video');
-        video.setAttribute('playsinline', '');
-        video.setAttribute('muted', '');
-        video.loop = true;
-        Object.assign(video.style, {
-            position: 'fixed', top: '-1px', left: '-1px',
-            width: '1px', height: '1px', opacity: '0.01',
-            pointerEvents: 'none', zIndex: '-1'
-        });
-
-        video.src = 'data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJC'
-            + 'h4ECQoWBAhhTgGcBAAAAAAABFUmpZlVC53BBAEAAAAAAAAVRtU2mhBI2mhkG2Y5MH8gAAA'
-            + 'AAAAKZBAAAAAAAAVaYAEAvABNDGsXbo0CcQAAAAAAABMUfGnAdSCAAAAAAAARmiIhAAIGNga'
-            + 'MggEBa8IBIOBAAAAAAABR';
-
-        document.body.appendChild(video);
-        video.play().catch(() => { });
-        window.__iczv.wakeLock = 'video-fallback';
-        log('Video fallback pro wake lock aktivován');
     };
 
     initWakeLock();
