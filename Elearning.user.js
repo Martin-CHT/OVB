@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           OVB elearning - textová část
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        2.8.2
+// @version        2.8.3
 // @description    Odstraní nepotřebné prvky, simuluje aktivitu, automaticky potvrzuje okna, obnovuje stránku a brání zhasnutí displeje
 // @author         Martin
 // @copyright      2025-2026, Martin
@@ -15,7 +15,7 @@
 // @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @match          https://iczv.vsfs.cz/auth/dipon/?a=elearning*
-// @match          https://iczv.vsfs.cz/auth/fpo/?a=elearning
+// @match          https://iczv.vsfs.cz/auth/fpo/?a=elearning*
 // @noframes
 // @run-at         document-end
 // @tag            OVB
@@ -294,7 +294,7 @@
     const initialPopup = document.querySelector(POPUP_SELECTOR);
     if (initialPopup) tryConfirmPopup(initialPopup);
 
-    /* ===== 6. Odpočet do cíle (Pouze elearning: 3 h) ===== */
+    /* ===== 6. Odpočet do cíle (Dynamicky: 3h pro dipon, 6h pro fpo) ===== */
     const parseTime = (str) => {
         const m = str.match(/(\d{2}):(\d{2}):(\d{2})/);
         if (!m) return null;
@@ -309,8 +309,19 @@
     };
 
     const initCountdown = () => {
-        const TARGET_SECONDS = 3 * 60 * 60; // Pevně 3 hodiny pro e-learning
-        const targetLabel = '3 h';
+        // Nastavení cílového času na základě aktuální URL adresy
+        let TARGET_SECONDS = 3 * 60 * 60; // Výchozí stav (3h)
+        let targetLabel = '3 h';
+
+        if (location.href.includes('/auth/fpo/')) {
+            TARGET_SECONDS = 6 * 60 * 60; // 6 hodin pro FPO
+            targetLabel = '6 h';
+        } else if (location.href.includes('/auth/dipon/')) {
+            TARGET_SECONDS = 3 * 60 * 60; // 3 hodiny pro DIPON
+            targetLabel = '3 h';
+        }
+
+        log(`Spouštím odpočet, limit nastaven na: ${targetLabel}`);
 
         let slideP = document.querySelector('div.slide > p');
         if (!slideP || !slideP.textContent.includes('Započtený čas')) {
