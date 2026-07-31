@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name           OVB elearning
+// @name           OVB elearning - textová část
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        2.6.0
-// @description    Odstraní nepotřebné prvky, simuluje aktivitu a automaticky potvrzuje okna
+// @version        2.8.0
+// @description    Odstraní nepotřebné prvky, simuluje aktivitu, automaticky potvrzuje okna a obnovuje stránku
 // @author         Martin
 // @copyright      2025-2026, Martin
 // @license        Proprietary - internal use only
@@ -15,7 +15,6 @@
 // @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @match          https://iczv.vsfs.cz/auth/dipon/?a=elearning*
-// @match          https://iczv.vsfs.cz/auth/dipon/?a=interaktivni
 // @match          https://iczv.vsfs.cz/auth/fpo/*
 // @noframes
 // @run-at         document-end
@@ -29,14 +28,71 @@
     'use strict';
 
     const DEBUG = true;           // přepnout na true pro ladění
-    const REFRESH_INTERVAL = 5;    // obnovit stránku každých N minut (0 = vypnuto)
+    const REFRESH_INTERVAL = 15;  // obnovit stránku každých N sekund
+    const STORAGE_KEY = 'ovb_autorefresh_enabled'; // Klíč pro uložení stavu přepínače
     const log = (...args) => DEBUG && console.log('[OVB]', ...args);
 
-    /* ===== Koordinace s Elearning-video.user.js ===== */
-    // Sdílený objekt na window pro vzájemnou detekci skriptů.
-    // Oba skripty mohou běžet nezávisle i společně bez kolizí.
+    // Načtení stavu přepínače z LocalStorage (výchozí je zapnuto)
+    let isRefreshEnabled = localStorage.getItem(STORAGE_KEY) !== 'false';
+
+    /* ===== UI pro přepínač automatického obnovování ===== */
+    const createToggleUI = () => {
+        const container = document.createElement('div');
+        Object.assign(container.style, {
+            position: 'fixed',
+            top: '15px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: '10000',
+            backgroundColor: '#ffffff',
+            border: '2px solid #0d6efd',
+            borderRadius: '8px',
+            padding: '8px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            color: '#0d6efd'
+        });
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'ovb-refresh-toggle';
+        checkbox.checked = isRefreshEnabled;
+        Object.assign(checkbox.style, {
+            cursor: 'pointer',
+            width: '18px',
+            height: '18px'
+        });
+
+        const label = document.createElement('label');
+        label.htmlFor = 'ovb-refresh-toggle';
+        label.textContent = `Automatické obnovení stránky - prevence proti odhlášení (${REFRESH_INTERVAL}s)`;
+        Object.assign(label.style, {
+            cursor: 'pointer',
+            userSelect: 'none',
+            margin: '0'
+        });
+
+        checkbox.addEventListener('change', (e) => {
+            isRefreshEnabled = e.target.checked;
+            localStorage.setItem(STORAGE_KEY, isRefreshEnabled);
+            log('Auto-obnova nastavena na:', isRefreshEnabled);
+        });
+
+        container.appendChild(checkbox);
+        container.appendChild(label);
+        document.body.appendChild(container);
+    };
+
+    createToggleUI();
+
+    /* ===== Koordinace skriptů ===== */
     if (!window.__iczv) window.__iczv = {};
-    window.__iczv.modalHandled = true; // signalizuje, že HTML modály jsou hlídány
+    window.__iczv.modalHandled = true;
 
     /* ===== 1. Odstranění nepotřebných prvků ===== */
     const REMOVE_SELECTOR = [
@@ -67,9 +123,6 @@
     cleanupObserver.observe(document.body, { childList: true, subtree: true });
 
     /* ===== 2. Spolehlivý timer (i na pozadí) ===== */
-    // Prohlížeče silně throttlují setTimeout/setInterval na neaktivních
-    // tabech (Chrome: min 1 s, Firefox: min 1 s, po 5 min: min 60 s).
-    // Web Worker běží ve vlastním vlákně a NENÍ throttlován.
     const createWorkerTimer = (callback, intervalMs) => {
         const blob = new Blob([
             `let id; onmessage = e => { clearInterval(id); id = setInterval(() => postMessage('tick'), e.data); };`
@@ -81,21 +134,17 @@
     };
 
     /* ===== 3. Simulace aktivity ===== */
-    // Běží VŽDY – i na pozadí / minimalizovaném prohlížeči.
     const simulateActivity = () => {
-        // Pohyb myši
         document.dispatchEvent(new MouseEvent('mousemove', {
             clientX: Math.random() * window.innerWidth,
             clientY: Math.random() * window.innerHeight,
             bubbles: true
         }));
 
-        // Kliknutí
         document.body.dispatchEvent(new MouseEvent('click', {
             bubbles: true, cancelable: true, view: window
         }));
 
-        // Stisk klávesy (Shift – neviditelný, ale spouští listenery)
         document.dispatchEvent(new KeyboardEvent('keydown', {
             key: 'Shift', code: 'ShiftLeft', bubbles: true
         }));
@@ -103,19 +152,12 @@
         log('Simulována aktivita');
     };
 
-    // Interval 5 s – Worker zajistí přesné spouštění i na pozadí
     createWorkerTimer(simulateActivity, 5000);
 
     /* ===== Zabránění spánku obrazovky / OS ===== */
-    // Sdílené přes window.__iczv.wakeLock – pokud už lock drží
-    // Elearning-video.user.js, tento skript ho nezíská znovu.
     const initWakeLock = () => {
-        if (window.__iczv.wakeLock) {
-            log('Wake Lock již aktivní (z druhého skriptu)');
-            return;
-        }
+        if (window.__iczv.wakeLock) return;
 
-        // Strategie 1: Screen Wake Lock API
         if ('wakeLock' in navigator) {
             const requestLock = async () => {
                 try {
@@ -123,11 +165,9 @@
                     window.__iczv.wakeLock = lock;
                     log('Screen Wake Lock aktivován');
                     lock.addEventListener('release', () => {
-                        log('Wake Lock uvolněn');
                         window.__iczv.wakeLock = null;
                     });
                 } catch (e) {
-                    log('Wake Lock selhal:', e.message, '– fallback na video');
                     createVideoFallback();
                 }
             };
@@ -140,7 +180,6 @@
                 }
             });
         } else {
-            log('Wake Lock API nedostupné – fallback na video');
             createVideoFallback();
         }
     };
@@ -180,17 +219,18 @@
     ].join(', ');
 
     const POPUP_SELECTOR = '.modal.show, .swal2-popup';
-    // ↑ Odstraněn příliš obecný '.popup' – přidat zpět,
-    //   pokud popup skutečně tuto třídu používá.
 
     /* ===== 4. Periodické obnovení stránky ===== */
-    // Časomíra na serveru se aktualizuje pouze při reloadu.
     if (REFRESH_INTERVAL > 0) {
-        const refreshMs = REFRESH_INTERVAL * 60 * 1000;
-        log(`Stránka se obnoví každých ${REFRESH_INTERVAL} min`);
+        const refreshMs = REFRESH_INTERVAL * 1000;
+        log(`Stránka se obnoví každých ${REFRESH_INTERVAL} sekund (pokud je zapnuto)`);
 
         createWorkerTimer(() => {
-            // Neobnovovat, pokud právě potvrzujeme popup
+            if (!isRefreshEnabled) {
+                log('Automatická obnova je vypnutá uživatelem.');
+                return;
+            }
+
             const popup = document.querySelector(POPUP_SELECTOR);
             if (popup && popup.dataset.autoConfirmed) {
                 log('Popup aktivní – odkládám refresh o 15 s');
@@ -203,7 +243,6 @@
     }
 
     /* ===== 5. Automatické potvrzení popupu o nečinnosti ===== */
-
     const tryConfirmPopup = (popup) => {
         if (popup.dataset.autoConfirmed) return;
         popup.dataset.autoConfirmed = '1';
@@ -218,24 +257,21 @@
                 log('Okno potvrzeno.');
             } else {
                 log('Potvrzovací tlačítko nenalezeno.');
-                popup.removeAttribute('data-auto-confirmed'); // umožnit opakovaný pokus
+                popup.removeAttribute('data-auto-confirmed');
             }
         }, delay);
     };
 
-    // MutationObserver pro detekci popupů (místo setInterval)
     const popupObserver = new MutationObserver(() => {
         const popup = document.querySelector(POPUP_SELECTOR);
         if (popup) tryConfirmPopup(popup);
     });
     popupObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
 
-    // Záložní kontrola při startu
     const initialPopup = document.querySelector(POPUP_SELECTOR);
     if (initialPopup) tryConfirmPopup(initialPopup);
 
-    /* ===== 6. Odpočet do cíle (elearning: 3 h, interaktivní: 2 h) ===== */
-
+    /* ===== 6. Odpočet do cíle (Pouze elearning: 3 h) ===== */
     const parseTime = (str) => {
         const m = str.match(/(\d{2}):(\d{2}):(\d{2})/);
         if (!m) return null;
@@ -250,13 +286,9 @@
     };
 
     const initCountdown = () => {
-        // Cíl závisí na typu stránky
-        const isInteraktivni = location.search.includes('a=interaktivni');
-        const TARGET_SECONDS = isInteraktivni ? 2 * 60 * 60 : 3 * 60 * 60;
-        const targetLabel = isInteraktivni ? '2 h' : '3 h';
+        const TARGET_SECONDS = 3 * 60 * 60; // Pevně 3 hodiny pro e-learning
+        const targetLabel = '3 h';
 
-        // Najít element s „Započtený čas" – flexibilní selektor pro obě stránky
-        // Strategie: najít <span> s časem (HH:MM:SS), ověřit že rodič obsahuje „Započtený čas"
         let slideP = document.querySelector('div.slide > p');
         if (!slideP || !slideP.textContent.includes('Započtený čas')) {
             slideP = null;
@@ -272,15 +304,11 @@
             }
         }
 
-        if (!slideP || !slideP.textContent.includes('Započtený čas')) {
-            log('Časovač nenalezen – sekce 6 přeskočena');
-            return;
-        }
+        if (!slideP || !slideP.textContent.includes('Započtený čas')) return;
 
         const elapsedSpan = slideP.querySelector('span.fw-bold');
         if (!elapsedSpan) return;
 
-        // Vytvořit element pro odpočet
         const countdownEl = document.createElement('span');
         countdownEl.className = 'fw-bold fs-5';
         countdownEl.style.marginLeft = '6px';
@@ -296,23 +324,19 @@
             const remaining = Math.max(0, TARGET_SECONDS - elapsed);
             countdownEl.textContent = formatTime(remaining);
 
-            // Barevné kódování
             if (remaining === 0) {
                 countdownEl.style.color = '#22c55e';
                 countdownEl.textContent = '✅ Splněno!';
             } else if (remaining <= 600) {
-                countdownEl.style.color = '#6ee7b7'; // zelená – pod 10 min
+                countdownEl.style.color = '#6ee7b7';
             } else if (remaining <= 1800) {
-                countdownEl.style.color = '#f59e0b'; // oranžová – pod 30 min
+                countdownEl.style.color = '#f59e0b';
             } else {
-                countdownEl.style.color = '#ef4444'; // červená
+                countdownEl.style.color = '#ef4444';
             }
         };
 
-        // První aktualizace okamžitě
         updateCountdown();
-
-        // Aktualizovat každou sekundu (Worker – spolehlivé i na pozadí)
         createWorkerTimer(updateCountdown, 1000);
 
         /* --- Předpokládaný čas splnění --- */
@@ -324,26 +348,18 @@
         slideP.appendChild(etaLabel);
         slideP.appendChild(etaEl);
 
-        // Offset mezi serverovým (Praha) a lokálním časem
         let pragueOffsetMs = 0;
-        let lastApiSync = 0;
 
         const syncPragueTime = async () => {
             try {
-                const res = await fetch(
-                    'https://timeapi.io/api/time/current/zone?timeZone=Europe/Prague'
-                );
+                const res = await fetch('https://timeapi.io/api/time/current/zone?timeZone=Europe/Prague');
                 if (!res.ok) throw new Error(res.status);
                 const data = await res.json();
-                // API vrací { hour, minute, seconds, ... }
                 const pragueNow = new Date();
                 pragueNow.setHours(data.hour, data.minute, data.seconds, 0);
                 pragueOffsetMs = pragueNow.getTime() - Date.now();
-                lastApiSync = Date.now();
-                log('Praha sync OK, offset:', pragueOffsetMs, 'ms');
             } catch (e) {
-                log('Praha API nedostupné, fallback na lokální čas:', e.message);
-                pragueOffsetMs = 0; // fallback – použije systémový čas
+                pragueOffsetMs = 0;
             }
         };
 
@@ -358,19 +374,15 @@
                 return;
             }
 
-            // Aktuální pražský čas + zbývající sekundy
             const pragueNowMs = Date.now() + pragueOffsetMs;
             const etaDate = new Date(pragueNowMs + remainingSec * 1000);
             const hh = String(etaDate.getHours()).padStart(2, '0');
             const mm = String(etaDate.getMinutes()).padStart(2, '0');
             etaEl.textContent = `${hh}:${mm}`;
-            etaEl.style.color = '#4ca0ffff'; // světle modrá
+            etaEl.style.color = '#4ca0ffff';
         };
 
-        // Jednorázový výpočet při načtení (fixní do dalšího refreshe)
         syncPragueTime().then(updateETA);
-
-        log(`Odpočet do ${targetLabel} + ETA inicializován`);
     };
 
     initCountdown();
