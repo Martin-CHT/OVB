@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           ICZV helper – auto potvrzení videa
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        3.5.0
+// @version        3.6.0
 // @description    Automaticky potvrzuje výzvy k bdělosti a postupně přepíná mezi segmenty videa.
 // @author         Martin
 // @copyright      2025-2026, Martin
@@ -14,6 +14,7 @@
 // @updateURL      https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning-video.user.js
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning-video.user.js
 // @match          https://iczv.vsfs.cz/auth/dipon/?a=video*
+// @match          https://iczv.vsfs.cz/auth/fpo/?a=video*
 // @noframes
 // @run-at         document-start
 // @tag            OVB
