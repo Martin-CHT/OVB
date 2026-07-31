@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name           OVB elearning – bdělost
+// @name           OVB elearning
 // @namespace      https://github.com/Martin-CHT/OVB
-// @version        2.5.0
+// @version        2.6.0
 // @description    Odstraní nepotřebné prvky, simuluje aktivitu a automaticky potvrzuje okna
 // @author         Martin
 // @copyright      2025-2026, Martin
@@ -16,6 +16,7 @@
 // @downloadURL    https://raw.githubusercontent.com/Martin-CHT/OVB/master/Elearning.user.js
 // @match          https://iczv.vsfs.cz/auth/dipon/?a=elearning*
 // @match          https://iczv.vsfs.cz/auth/dipon/?a=interaktivni
+// @match          https://iczv.vsfs.cz/auth/fpo/*
 // @noframes
 // @run-at         document-end
 // @tag            OVB
